@@ -1,0 +1,119 @@
+ // https://www.tinkercad.com/things/e9ObYlbtjXP-smartlock
+
+#include <Keypad.h>
+#include <Servo.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); 
+
+const byte LINHAS = 4;
+const byte COLUNAS = 4;
+char teclas[LINHAS][COLUNAS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+
+byte pinosLinhas[LINHAS] = {2, 3, 4, 5};
+byte pinosColunas[COLUNAS] = {6, 7, 8, 9};
+
+Keypad teclado = Keypad(makeKeymap(teclas), pinosLinhas, pinosColunas, LINHAS, COLUNAS);
+
+Servo meuServo;
+const int pinoServo = 10;
+const int pinoBuzzer = 11;
+const int ledVermelho = 12;
+const int ledVerde = 13;
+
+String senhaCorreta = "1111";
+String senhaDigitada = "";
+
+void setup() {
+  lcd.init();
+  lcd.backlight();
+  
+  pinMode(pinoBuzzer, OUTPUT);
+  pinMode(ledVermelho, OUTPUT);
+  pinMode(ledVerde, OUTPUT);
+  
+  // Posicionamento inicial
+  meuServo.attach(pinoServo);
+  meuServo.write(180); // Inicia trancado no sentido inverso
+  delay(500);          // Tempo para o motor chegar na posição
+  meuServo.detach();   // Desliga o sinal para poupar energia
+  
+  exibirStatusFechado();
+}
+
+void loop() {
+  char tecla = teclado.getKey();
+
+  if (tecla) {
+    tone(pinoBuzzer, 2000, 50); 
+    if (tecla == '#') {
+      senhaDigitada = "";
+      exibirStatusFechado();
+    } 
+    else {
+      senhaDigitada += tecla;
+      lcd.setCursor(6 + senhaDigitada.length(), 1);
+      lcd.print("*");
+    }
+  }
+
+  if (senhaDigitada.length() == 4) {
+    delay(200);
+    verificarSenha();
+  }
+}
+
+void verificarSenha() {
+  if (senhaDigitada == senhaCorreta) {
+    lcd.clear();
+    lcd.print("Senha Correta!");
+    digitalWrite(ledVerde, HIGH);
+    
+    // --- MOVIMENTO DE ABRIR ---
+    meuServo.attach(pinoServo); // Reativa o servo
+    meuServo.write(90);         // Gira para abrir
+    delay(500);                 // Espera o movimento físico terminar
+    meuServo.detach();          // Desativa o servo enquanto está aberto
+    
+    digitalWrite(pinoBuzzer, HIGH);
+    delay(3000);
+    digitalWrite(pinoBuzzer, LOW);
+    
+    delay(7000); 
+    
+    // --- MOVIMENTO DE FECHAR ---
+    meuServo.attach(pinoServo); // Reativa o servo
+    meuServo.write(180);        // Volta para trancado
+    delay(500);                 // Espera o movimento físico terminar
+    meuServo.detach();          // Desativa novamente
+    
+    digitalWrite(ledVerde, LOW);
+  } 
+  else {
+    lcd.clear();
+    lcd.print("Senha Incorreta");
+    digitalWrite(ledVermelho, HIGH);
+    for(int i=0; i<3; i++){
+      tone(pinoBuzzer, 500, 200);
+      delay(300);
+    }
+    delay(1000);
+    digitalWrite(ledVermelho, LOW);
+  }
+  
+  senhaDigitada = "";
+  exibirStatusFechado();
+}
+
+void exibirStatusFechado() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("FECHADO");
+  lcd.setCursor(0, 1);
+  lcd.print("Senha:");
+}
